@@ -20,7 +20,7 @@ from glc.security.pairing import CODE_TTL_SECONDS, get_pairing_store
 router = APIRouter()
 
 
-def _require_token(authorization: str | None) -> None:
+def _require_token(authorization: str | None = Header(default=None)) -> None:
     expected = get_or_create_install_token()
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "missing bearer token (Authorization: Bearer <install_token>)")
