@@ -230,3 +230,20 @@ In a monolithic application, all components share the same Process ID (PID). An 
 **How to Test the Vulnerability:**
 1. **Self-Termination Test:** Run a Python snippet inside the gateway process: `import os, signal; os.kill(os.getpid(), signal.SIGTERM)`.
 2. **Result:** The entire gateway API process instantly terminates.
+
+## 13. Poison the cost ledger (Leak 10)
+
+**Description:**
+The gateway relies on the cost ledger (`glc.db.log_call`) to track API usage and bill tenants accurately. However, because the system is a monolith, an attacker who compromises a channel adapter can simply import the database module and log fabricated token usage against any victim agent they want (`glc.db.log_call(..., input_tokens=999999999, agent="victim")`). Because there is no cryptographic proof or process boundary separating the caller from the database, the ledger blindly accepts the forged write.
+
+**Audit Documentation (The Three Questions):**
+1. **Broken Invariant:** Ledger Integrity (Cost metrics must be unfabricated and tamper-proof).
+2. **Attacker Role:** Malicious Adapter / Prompt Injection (An attacker executing arbitrary code inside an adapter context).
+3. **Migration Status:** Inherited structural flaw. The monolith allows any code inside the process to call internal python functions like `log_call` without authentication.
+
+**The Fix:**
+**Unmitigated in Part 1 (Capstone Scope).** While we could theoretically require a "secret token" to be passed to `log_call`, an attacker sharing the monolithic memory space could simply read that token from memory (e.g., from `app.state` or a global variable) and forge the call anyway. The only mathematically sound fix is architectural: implementing Process Separation (Move 2 / Capstone). Once the adapters are in isolated sandboxes, the core gateway can hold a secure, private key used to cryptographically sign valid LLM calls. The isolated adapters will never see this key, making it physically impossible for them to forge ledger writes.
+
+**How to Test the Vulnerability:**
+1. **Ledger Poisoning Test:** Run a Python snippet inside the gateway process: `import glc.db; glc.db.log_call(provider="gemini", model="x", input_tokens=999999999, agent="victim")`.
+2. **Result:** A massive, fabricated usage row lands in the cost ledger, completely destroying billing integrity.
