@@ -196,3 +196,21 @@ While the ultimate architectural fix is Move 2 (running adapters in an isolated 
 **How to Test the Fix:**
 1. **Escalation Test:** Run a Python snippet inside the gateway process: `from glc.security.pairing import get_pairing_store; get_pairing_store().force_pair_owner("telegram","attacker-id",user_handle="me")`.
 2. **Result:** The execution will immediately crash with an `AttributeError`, denying the privilege escalation.
+
+## 10. Read the install token (Leak 4)
+
+**Description:** 
+The `install_token` acts as the master password for the control plane. In the current implementation, `get_or_create_install_token()` reads and writes this token directly to a file (`~/.glc/install_token`) on the shared volume. Because the gateway and channel adapters run in the same monolithic process with shared filesystem access, any adapter code can trivially use Python's `open()` to read the token file and gain full control over the gateway.
+
+**Audit Documentation (The Three Questions):**
+1. **Broken Invariant:** Control Plane Isolation (Adapters must never see the control token).
+2. **Attacker Role:** Malicious Adapter / Prompt Injection (An attacker who executes arbitrary code inside an adapter context).
+3. **Migration Status:** Inherited structural flaw. The monolith design shares filesystem access globally across the container.
+
+**The Fix:**
+We updated `glc/config.py` to allow the token to be passed dynamically as an environment variable (`GLC_INSTALL_TOKEN`) rather than forcing it to touch the shared filesystem. We also modified `get_or_create_install_token()` to securely cache the token in memory upon first read. Then, in `glc/main.py`, we added `GLC_INSTALL_TOKEN` to our environment variable scrubbing loop during the server's `lifespan`. Now, in production (using a Modal Secret), the token is injected into the container, cached in memory by the gateway, scrubbed from `os.environ`, and *never* touches the shared disk where an adapter could read it.
+
+**How to Test the Fix:**
+1. **Environment:** Set `GLC_INSTALL_TOKEN` in the environment before starting the gateway (or use a Modal Secret).
+2. **Snippet Test:** Run a Python snippet inside the gateway process: `print(open("~/.glc/install_token").read())`.
+3. **Result:** The execution will fail with a `FileNotFoundError` because the token is stored safely in memory and was never written to the shared disk volume.

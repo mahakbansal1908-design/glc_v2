@@ -41,12 +41,27 @@ def install_token_path() -> Path:
     return CONFIG_DIR / "install_token"
 
 
+_token_cache: str | None = None
+
 def get_or_create_install_token() -> str:
     """Per-installation token used to authenticate WS adapter connections
     and /v1/control/* requests. Generated once and persisted to disk."""
+    global _token_cache
+    if _token_cache:
+        return _token_cache
+        
+    # FIX for Leak 4: Allow binding token as an environment Secret so it 
+    # never touches the shared disk volume.
+    env_tok = os.getenv("GLC_INSTALL_TOKEN")
+    if env_tok:
+        _token_cache = env_tok.strip()
+        return _token_cache
+
     p = install_token_path()
     if p.exists():
-        return p.read_text().strip()
+        _token_cache = p.read_text().strip()
+        return _token_cache
+        
     import secrets
 
     tok = secrets.token_urlsafe(32)
@@ -55,4 +70,6 @@ def get_or_create_install_token() -> str:
         os.chmod(p, 0o600)
     except OSError:
         pass
+        
+    _token_cache = tok
     return tok

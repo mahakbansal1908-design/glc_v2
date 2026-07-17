@@ -80,6 +80,7 @@ async def lifespan(app: FastAPI):
         "CEREBRAS_API_KEY",
         "OPEN_ROUTER_API_KEY",
         "GITHUB_ACCESS_TOKEN",
+        "GLC_INSTALL_TOKEN",
     ]:
         if k in os.environ:
             del os.environ[k]
