@@ -650,7 +650,7 @@ async def chat(req: ChatRequest, request: Request):
                 tag += f" → backoff {secs:.0f}s ({reason})"
             all_attempts.append({"provider": name, "reason": tag})
             if explicit_override or not getattr(e, "retryable", True):
-                raise HTTPException(502, f"{name} failed: {e}")
+                raise HTTPException(502, "Upstream provider error")
             candidates = [c for c in candidates if c != name]
             continue
         except HTTPException:
@@ -675,11 +675,11 @@ async def chat(req: ChatRequest, request: Request):
             )
             all_attempts.append({"provider": name, "reason": f"exception: {str(e)[:120]}"})
             if explicit_override:
-                raise HTTPException(502, f"{name} failed: {e}")
+                raise HTTPException(502, "Upstream provider error")
             candidates = [c for c in candidates if c != name]
             continue
 
-    raise HTTPException(503, f"all providers unavailable. attempts: {all_attempts}. last_error: {last_err}")
+    raise HTTPException(503, "All providers unavailable")
 
 
 @router.post("/v1/chat/batch", dependencies=[Depends(_require_token)])
@@ -757,11 +757,11 @@ async def embed(req: EmbedRequest, request: Request):
         )
         if req.provider:
             if e.status == 429:
-                raise HTTPException(429, f"{req.provider} rate-limited: {e}")
+                raise HTTPException(429, "Upstream provider rate-limited")
             if e.status == 400:
-                raise HTTPException(400, str(e))
-            raise HTTPException(502, f"{req.provider} embed failed: {e}")
-        raise HTTPException(503, str(e))
+                raise HTTPException(400, "Upstream provider error")
+            raise HTTPException(502, "Upstream provider error")
+        raise HTTPException(503, "Upstream provider error")
 
     db.log_call(
         provider=name,
