@@ -345,7 +345,7 @@ def _validate_structured(text: str, schema: dict):
 # ─────────────────────────── routes ───────────────────────────
 
 
-@router.post("/v1/chat")
+@router.post("/v1/chat", dependencies=[Depends(_require_token)])
 async def chat(req: ChatRequest, request: Request):
     state = request.app.state
     rtr = state.router
@@ -638,7 +638,7 @@ async def chat(req: ChatRequest, request: Request):
     raise HTTPException(503, f"all providers unavailable. attempts: {all_attempts}. last_error: {last_err}")
 
 
-@router.post("/v1/chat/batch")
+@router.post("/v1/chat/batch", dependencies=[Depends(_require_token)])
 async def chat_batch(req: BatchChatRequest, request: Request):
     sem = _asyncio.Semaphore(max(1, req.max_concurrency))
 
@@ -655,7 +655,7 @@ async def chat_batch(req: BatchChatRequest, request: Request):
     return {"results": results}
 
 
-@router.post("/v1/vision")
+@router.post("/v1/vision", dependencies=[Depends(_require_token)])
 async def vision(req: VisionRequest, request: Request):
     content: list[dict[str, Any]] = [{"type": "text", "text": req.prompt}]
     content.append({"type": "image_url", "image_url": {"url": req.image}})
@@ -677,7 +677,7 @@ async def vision(req: VisionRequest, request: Request):
     return await chat(inner, request)
 
 
-@router.post("/v1/embed")
+@router.post("/v1/embed", dependencies=[Depends(_require_token)])
 async def embed(req: EmbedRequest, request: Request):
     from glc import embedders as E
 
