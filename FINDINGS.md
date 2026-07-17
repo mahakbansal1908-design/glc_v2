@@ -264,3 +264,20 @@ The gateway and all its channel adapters currently deploy as a single Modal `Fun
 **How to Test the Vulnerability:**
 1. **Exfiltration Test:** Run a Python snippet inside the gateway process (or via an adapter): `import urllib.request; urllib.request.urlopen("https://example.com")`.
 2. **Result:** The request fully succeeds, proving that the execution environment has unrestricted outbound internet access to arbitrary third-party servers.
+
+## 15. One Secret for the whole Function (A4)
+
+**Description:**
+The gateway relies on a single Modal Secret (`glc-llm-keys`) that contains all master provider keys (Gemini, Groq, etc.). Because the gateway and channel adapters are deployed as a single `@app.function`, this Secret is unconditionally injected into the environment of the entire monolithic container. This is the root cause of Leak 1. While we applied a Python-level patch to scrub `os.environ` during startup, the structural flaw remains: the platform injected the master keys into a container running untrusted code.
+
+**Audit Documentation (The Three Questions):**
+1. **Broken Invariant:** Secret Isolation / Principle of Least Privilege (An adapter must never hold or be exposed to a provider master key).
+2. **Attacker Role:** Malicious Adapter / Prompt Injection (An attacker executing arbitrary code inside an adapter context).
+3. **Migration Status:** Inherited structural flaw. The monolith design forces all configuration and secrets to be mounted globally to the single execution unit.
+
+**The Fix:**
+**Unmitigated in Part 1 (Capstone Scope).** Although we scrubbed `os.environ` in Python, a sophisticated attacker could still potentially use `ctypes` to read `/proc/self/environ` or recover the strings from raw process memory before they are garbage collected. The only mathematically sound fix is architectural: implementing Per-slot Secrets and per-tool credential issuance (Moves 2 and 3). In the Capstone design, the untrusted adapter sandboxes will *never* have the `glc-llm-keys` Secret mounted to them. Instead, the gateway will issue short-lived, narrowly-scoped credentials over the network strictly on a per-tool-call basis.
+
+**How to Test the Vulnerability:**
+1. **Root Cause Analysis:** Inspect the `modal_app.py` deployment configuration: `@app.function(secrets=[modal.Secret.from_name("glc-llm-keys")])`.
+2. **Result:** The deployment explicitly injects the master keys into the shared execution environment, proving the architectural vulnerability.
