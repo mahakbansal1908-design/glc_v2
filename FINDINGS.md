@@ -197,20 +197,19 @@ While the ultimate architectural fix is Move 2 (running adapters in an isolated 
 1. **Escalation Test:** Run a Python snippet inside the gateway process: `from glc.security.pairing import get_pairing_store; get_pairing_store().force_pair_owner("telegram","attacker-id",user_handle="me")`.
 2. **Result:** The execution will immediately crash with an `AttributeError`, denying the privilege escalation.
 
-## 10. Read the install token (Leak 4)
+## 11. Disable the policy engine (Leak 5)
 
-**Description:** 
-The `install_token` acts as the master password for the control plane. In the current implementation, `get_or_create_install_token()` reads and writes this token directly to a file (`~/.glc/install_token`) on the shared volume. Because the gateway and channel adapters run in the same monolithic process with shared filesystem access, any adapter code can trivially use Python's `open()` to read the token file and gain full control over the gateway.
+**Description:**
+Python's highly dynamic nature allows any code running in the process to rebind or "monkey-patch" functions and classes. An attacker who executes a payload within an adapter can simply run `import glc.policy.engine as e; e.evaluate = lambda *a, **k: type("PolicyVerdict", (), {"action":"allow"})()`. This instantly neuters the entire security policy engine for the gateway, rendering all subsequent access control checks completely meaningless because they will permanently return "allow."
 
 **Audit Documentation (The Three Questions):**
-1. **Broken Invariant:** Control Plane Isolation (Adapters must never see the control token).
+1. **Broken Invariant:** Policy Enforcement (The policy engine must be authoritative and tamper-proof).
 2. **Attacker Role:** Malicious Adapter / Prompt Injection (An attacker who executes arbitrary code inside an adapter context).
-3. **Migration Status:** Inherited structural flaw. The monolith design shares filesystem access globally across the container.
+3. **Migration Status:** Inherited structural flaw. Due to the monolith design, the adapters and the policy engine share the same Python interpreter and process memory.
 
 **The Fix:**
-We updated `glc/config.py` to allow the token to be passed dynamically as an environment variable (`GLC_INSTALL_TOKEN`) rather than forcing it to touch the shared filesystem. We also modified `get_or_create_install_token()` to securely cache the token in memory upon first read. Then, in `glc/main.py`, we added `GLC_INSTALL_TOKEN` to our environment variable scrubbing loop during the server's `lifespan`. Now, in production (using a Modal Secret), the token is injected into the container, cached in memory by the gateway, scrubbed from `os.environ`, and *never* touches the shared disk where an adapter could read it.
+**Unmitigated in Part 1 (Capstone Scope).** Because a shared Python process can *always* be monkey-patched (via `sys.modules`, `gc.get_referrers`, or direct rebinding), there is no mathematically sound way to prevent this vulnerability inside the monolith architecture. The true and only fix is architectural: we must extract the adapters and run them in a heavily restricted, separate process sandbox (Move 2 / Capstone). Since they will no longer share the gateway's memory space, they will be physically unable to monkey-patch the gateway's internal `evaluate` function.
 
-**How to Test the Fix:**
-1. **Environment:** Set `GLC_INSTALL_TOKEN` in the environment before starting the gateway (or use a Modal Secret).
-2. **Snippet Test:** Run a Python snippet inside the gateway process: `print(open("~/.glc/install_token").read())`.
-3. **Result:** The execution will fail with a `FileNotFoundError` because the token is stored safely in memory and was never written to the shared disk volume.
+**How to Test the Vulnerability:**
+1. **Monkey-Patch Test:** Run a Python snippet inside the gateway process: `import glc.policy.engine as e; from glc.policy.schemas import PolicyVerdict; e.evaluate = lambda *a, **k: PolicyVerdict(action="allow", reason="pwn")`.
+2. **Result:** Every single policy decision for the entire application will now instantly return `allow`, completely bypassing all security rules.
