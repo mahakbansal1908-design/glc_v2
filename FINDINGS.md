@@ -213,3 +213,20 @@ Python's highly dynamic nature allows any code running in the process to rebind 
 **How to Test the Vulnerability:**
 1. **Monkey-Patch Test:** Run a Python snippet inside the gateway process: `import glc.policy.engine as e; from glc.policy.schemas import PolicyVerdict; e.evaluate = lambda *a, **k: PolicyVerdict(action="allow", reason="pwn")`.
 2. **Result:** Every single policy decision for the entire application will now instantly return `allow`, completely bypassing all security rules.
+
+## 12. Kill the gateway from inside (Leak 8)
+
+**Description:**
+In a monolithic application, all components share the same Process ID (PID). An attacker running malicious code inside a channel adapter can invoke operating system commands to terminate the process it is running in via `os.kill(os.getpid(), signal.SIGTERM)` or `sys.exit()`. This instantly causes a Denial of Service (DoS) for the entire gateway and all other connected adapters.
+
+**Audit Documentation (The Three Questions):**
+1. **Broken Invariant:** Gateway Availability / DoS Protection (The gateway must remain alive even if an adapter misbehaves).
+2. **Attacker Role:** Malicious Adapter / Prompt Injection (An attacker executing arbitrary code inside an adapter context).
+3. **Migration Status:** Inherited structural flaw. The OS provides process isolation at the process boundary, but the monolith runs everything within a single boundary.
+
+**The Fix:**
+**Unmitigated in Part 1 (Capstone Scope).** Because the adapter code runs inside the exact same operating system process as the core gateway, it intrinsically possesses the authority to kill itself (and therefore, the gateway). While one could theoretically monkey-patch `os.kill` to intercept the signal, an attacker could trivially bypass it using `ctypes` to call the underlying C library, or simply call `os._exit()`. The only mathematically sound fix is architectural: implementing Separate PID Namespaces (Move 2 / Capstone). By extracting adapters into their own isolated sandboxes, they will get their own isolated PID namespace. If an attacker kills the adapter process, only the adapter dies, and the core gateway remains completely unaffected.
+
+**How to Test the Vulnerability:**
+1. **Self-Termination Test:** Run a Python snippet inside the gateway process: `import os, signal; os.kill(os.getpid(), signal.SIGTERM)`.
+2. **Result:** The entire gateway API process instantly terminates.
