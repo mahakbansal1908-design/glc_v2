@@ -184,7 +184,7 @@ class PairingStore:
             )
             return cur.rowcount > 0
 
-    def force_pair_owner(
+    def _force_pair_owner(
         self, channel: str, channel_user_id: str, user_handle: str = "owner"
     ) -> PairingRecord:
         """Out-of-band pairing for the installation owner. Used by the

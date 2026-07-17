@@ -179,3 +179,20 @@ To patch this leak within the monolith, we implemented two layers of defense in 
 **How to Test the Fix:**
 1. **Deletion Test:** Run a Python snippet inside the gateway process: `import os, sqlite3; sqlite3.connect(os.path.join(os.getenv("GLC_CONFIG_DIR", os.path.expanduser("~/.glc")), "audit.sqlite")).execute("DELETE FROM audit_log")`.
 2. **Result:** The database engine will now reject the operation with a hard SQLite `OperationalError: audit_log is append-only (deletion forbidden)`.
+
+## 9. Escalate to owner (Leak 3)
+
+**Description:** 
+The core pairing store (which manages user trust levels) exposes an internal method called `force_pair_owner` on the `PairingStore` class. Because the gateway and channel adapters run in a shared monolithic process, an attacker who achieves prompt injection on an adapter can simply import the pairing store and execute this method to grant themselves `owner_paired` trust, instantly escalating to full administrative privileges.
+
+**Audit Documentation (The Three Questions):**
+1. **Broken Invariant:** Principle of Least Privilege / Control Plane Isolation (Never expose privileged methods in a shared process).
+2. **Attacker Role:** Malicious Adapter / Prompt Injection (An attacker who executes arbitrary code inside an adapter context).
+3. **Migration Status:** Inherited structural flaw. The monolith design exposes all class methods globally within the process memory.
+
+**The Fix:**
+While the ultimate architectural fix is Move 2 (running adapters in an isolated process so they physically cannot access the pairing store), we patched this within the monolith for Part 1. We renamed the privileged method to `_force_pair_owner`, enforcing standard Python encapsulation to prevent it from being a public API on the `PairingStore` class. All internal tests and bootstrapping scripts were refactored to use the private convention, formally removing the method from the public interface exposed to adapters.
+
+**How to Test the Fix:**
+1. **Escalation Test:** Run a Python snippet inside the gateway process: `from glc.security.pairing import get_pairing_store; get_pairing_store().force_pair_owner("telegram","attacker-id",user_handle="me")`.
+2. **Result:** The execution will immediately crash with an `AttributeError`, denying the privilege escalation.
