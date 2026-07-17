@@ -46,6 +46,18 @@ _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 def init_store() -> None:
     with _conn() as c:
         c.executescript(_SCHEMA_PATH.read_text())
+        
+        # Migration to v2: Add hash chaining columns
+        row = c.execute("SELECT MAX(version) AS v FROM audit_schema").fetchone()
+        v = int(row["v"] or 0) if row else 0
+        if v < 2:
+            try:
+                c.execute("ALTER TABLE audit_log ADD COLUMN prev_hash TEXT")
+                c.execute("ALTER TABLE audit_log ADD COLUMN curr_hash TEXT")
+            except sqlite3.OperationalError:
+                # Ignore if columns were already added manually
+                pass
+            c.execute("INSERT OR IGNORE INTO audit_schema (version, applied_at) VALUES (2, strftime('%s','now'))")
 
 
 def _jsonify(v: Any) -> str | None:
@@ -78,13 +90,25 @@ class AuditStore:
         result: Any = None,
     ) -> int:
         with _conn() as c:
+            # FIX for Leak 2: Calculate cryptographic hash chain
+            row = c.execute("SELECT curr_hash FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()
+            prev_hash = row["curr_hash"] if row and row["curr_hash"] else "0" * 64
+            
+            ts = time.time()
+            pj = _jsonify(params)
+            rj = _jsonify(result)
+            
+            import hashlib
+            raw_data = f"{prev_hash}|{ts}|{session_id}|{channel}|{channel_user_id}|{trust_level}|{event_type}|{tool}|{policy_verdict}|{pj}|{rj}"
+            curr_hash = hashlib.sha256(raw_data.encode("utf-8")).hexdigest()
+            
             cur = c.execute(
                 """INSERT INTO audit_log
                    (ts, session_id, channel, channel_user_id, trust_level,
-                    event_type, tool, policy_verdict, params_json, result_json)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    event_type, tool, policy_verdict, params_json, result_json, prev_hash, curr_hash)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
-                    time.time(),
+                    ts,
                     session_id,
                     channel,
                     channel_user_id,
@@ -92,8 +116,10 @@ class AuditStore:
                     event_type,
                     tool,
                     policy_verdict,
-                    _jsonify(params),
-                    _jsonify(result),
+                    pj,
+                    rj,
+                    prev_hash,
+                    curr_hash
                 ),
             )
             return int(cur.lastrowid or 0)

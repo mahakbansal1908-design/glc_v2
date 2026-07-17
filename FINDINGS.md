@@ -160,3 +160,22 @@ While the ultimate architectural fix requires "Per-slot Secrets plus per-tool cr
 **How to Test the Fix:**
 1. **Snippet Test:** Run a test adapter or Python snippet inside the gateway process containing `import os; print(os.environ.get("GEMINI_API_KEY", "NOT FOUND"))`.
 2. **Result:** Instead of printing the live key, it should safely print `NOT FOUND`.
+
+## 8. Erase the audit log (Leak 2)
+
+**Description:** 
+The audit database is a plain file (`audit.sqlite`) that is fully writable by any in-process code. An attacker running a malicious payload inside an adapter can simply execute a SQL `DELETE FROM audit_log` query, instantly erasing the security history without leaving any trace of the deletion.
+
+**Audit Documentation (The Three Questions):**
+1. **Broken Invariant:** Audit logs must be tamper-proof (No security history erasure).
+2. **Attacker Role:** Malicious Adapter / Prompt Injection (An attacker who executes arbitrary code inside an adapter context).
+3. **Migration Status:** Inherited structural flaw. The SQLite database lacked append-only enforcement at the database engine level.
+
+**The Fix:**
+To patch this leak within the monolith, we implemented two layers of defense in `glc/audit/store.py` and `glc/audit/schema.sql`:
+1. **Append-Only Triggers**: Added SQLite triggers (`BEFORE DELETE` and `BEFORE UPDATE`) that immediately `RAISE(ABORT)` if any code attempts to alter or drop an existing row.
+2. **Cryptographic Hash Chaining**: Wrote a migration to add `prev_hash` and `curr_hash` columns. Now, `store.py` securely computes `SHA-256(prev_hash + data)` for every new log entry, cryptographically chaining them together. If a sophisticated attacker manages to drop the triggers or manually edit the `.sqlite` file on disk, the hash chain will break, making the tampering mathematically detectable.
+
+**How to Test the Fix:**
+1. **Deletion Test:** Run a Python snippet inside the gateway process: `import os, sqlite3; sqlite3.connect(os.path.join(os.getenv("GLC_CONFIG_DIR", os.path.expanduser("~/.glc")), "audit.sqlite")).execute("DELETE FROM audit_log")`.
+2. **Result:** The database engine will now reject the operation with a hard SQLite `OperationalError: audit_log is append-only (deletion forbidden)`.
