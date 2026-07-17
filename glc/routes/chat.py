@@ -18,11 +18,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from jsonschema import Draft202012Validator, ValidationError
 
 from glc import db
+from glc.routes.control import _require_token
 from glc import providers as P
 from glc.llm_schemas import (
     BatchChatRequest,
@@ -739,7 +740,7 @@ async def embed(req: EmbedRequest, request: Request):
     ).model_dump()
 
 
-@router.get("/v1/embedders")
+@router.get("/v1/embedders", dependencies=[Depends(_require_token)])
 async def list_embedders(request: Request):
     from glc import embedders as E
 
@@ -755,7 +756,7 @@ async def list_embedders(request: Request):
     }
 
 
-@router.get("/v1/cost/by_agent")
+@router.get("/v1/cost/by_agent", dependencies=[Depends(_require_token)])
 async def cost_by_agent(session: str | None = None, agent: str | None = None):
     from glc import pricing as _pricing
 
@@ -772,7 +773,7 @@ async def cost_by_agent(session: str | None = None, agent: str | None = None):
     return out
 
 
-@router.get("/v1/providers")
+@router.get("/v1/providers", dependencies=[Depends(_require_token)])
 async def list_providers(request: Request):
     r = request.app.state.router
     return {
@@ -784,7 +785,7 @@ async def list_providers(request: Request):
     }
 
 
-@router.get("/v1/capabilities")
+@router.get("/v1/capabilities", dependencies=[Depends(_require_token)])
 async def capabilities(request: Request):
     r = request.app.state.router
     out = {}
@@ -803,7 +804,7 @@ async def capabilities(request: Request):
     return out
 
 
-@router.get("/v1/status")
+@router.get("/v1/status", dependencies=[Depends(_require_token)])
 async def status(request: Request):
     r = request.app.state.router
     return {
@@ -814,7 +815,7 @@ async def status(request: Request):
     }
 
 
-@router.get("/v1/routers")
+@router.get("/v1/routers", dependencies=[Depends(_require_token)])
 async def routers(request: Request):
     rp = request.app.state.router_pool
     return {
@@ -828,6 +829,6 @@ async def routers(request: Request):
     }
 
 
-@router.get("/v1/calls")
+@router.get("/v1/calls", dependencies=[Depends(_require_token)])
 async def calls(limit: int = 100, provider: str | None = None, status: str | None = None):
     return db.recent(limit=limit, provider=provider, status=status)
