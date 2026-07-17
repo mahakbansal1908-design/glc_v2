@@ -247,3 +247,20 @@ The gateway relies on the cost ledger (`glc.db.log_call`) to track API usage and
 **How to Test the Vulnerability:**
 1. **Ledger Poisoning Test:** Run a Python snippet inside the gateway process: `import glc.db; glc.db.log_call(provider="gemini", model="x", input_tokens=999999999, agent="victim")`.
 2. **Result:** A massive, fabricated usage row lands in the cost ledger, completely destroying billing integrity.
+
+## 14. Single Function, no egress wall (A3)
+
+**Description:**
+The gateway and all its channel adapters currently deploy as a single Modal `Function` (`@app.function`). In Modal, standard Functions do not support outbound network control or egress firewalls. This means any adapter—even if compromised by prompt injection—has unrestricted outbound internet access. An attacker could trivially exfiltrate sensitive data, internal tokens, or prompt context to `attacker.example.com`.
+
+**Audit Documentation (The Three Questions):**
+1. **Broken Invariant:** Network Egress Isolation (Untrusted code must be strictly firewall-blocked from exfiltrating data to arbitrary domains).
+2. **Attacker Role:** Malicious Adapter / Prompt Injection (An attacker executing arbitrary code inside an adapter context).
+3. **Migration Status:** Inherited structural flaw. The monolith relies on a standard serverless Function deployment which lacks network isolation capabilities.
+
+**The Fix:**
+**Unmitigated in Part 1 (Capstone Scope).** Because the entire application shares one Modal Function, we cannot implement an egress wall without breaking the core gateway's ability to communicate with legitimate APIs (like `googleapis.com`). The only mathematically sound fix is architectural: implementing Move 4 (Modal Sandboxes). By executing untrusted channel adapters inside ephemeral Modal Sandboxes, we can utilize the sandbox-specific `outbound_domain_allowlist` parameter to strictly enforce a network boundary, preventing any connections to unapproved, attacker-controlled domains.
+
+**How to Test the Vulnerability:**
+1. **Exfiltration Test:** Run a Python snippet inside the gateway process (or via an adapter): `import urllib.request; urllib.request.urlopen("https://example.com")`.
+2. **Result:** The request fully succeeds, proving that the execution environment has unrestricted outbound internet access to arbitrary third-party servers.
