@@ -14,7 +14,7 @@ Subcommands
 
 ``owner <user_id> [--handle NAME]``
     Pair a user as the installation owner directly. Equivalent to
-    ``PairingStore.force_pair_owner``. Use this for the demo + tests
+    ``PairingStore._force_pair_owner``. Use this for the demo + tests
     where you want trust_level=owner_paired without going through the
     six-digit code dance.
 
@@ -85,7 +85,7 @@ def _filter_teams(pairings: list[PairingRecord]) -> list[PairingRecord]:
 def cmd_owner(args: argparse.Namespace) -> int:
     """Pair a user as ``owner_paired`` directly."""
     store = get_pairing_store()
-    rec = store.force_pair_owner(CHANNEL, args.user_id, user_handle=args.handle or "owner")
+    rec = store._force_pair_owner(CHANNEL, args.user_id, user_handle=args.handle or "owner")
     print(f"Paired {rec.channel_user_id!r} as owner_paired on channel {CHANNEL!r}.")
     _print_record(rec)
     return 0

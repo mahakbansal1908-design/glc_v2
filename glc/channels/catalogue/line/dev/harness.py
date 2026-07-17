@@ -395,7 +395,7 @@ async def _amain(args: argparse.Namespace) -> int:
         # Isolate trust lookups in a throwaway DB; never touch ~/.glc/pairings.sqlite.
         os.environ["GLC_PAIRING_DB"] = os.path.join(tmp, "pairings.sqlite")
         pairing._singleton = None
-        pairing.get_pairing_store().force_pair_owner("line", owner_id, user_handle="owner")
+        pairing.get_pairing_store()._force_pair_owner("line", owner_id, user_handle="owner")
 
         ctx = Ctx(mode=mode, config=config, secret=secret, owner_id=owner_id)
         names = (

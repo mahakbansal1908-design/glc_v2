@@ -204,7 +204,7 @@ def main():
     OWNER_EMAIL = os.environ.get("GLC_GMAIL_OWNER")
     store = get_pairing_store()
     if OWNER_EMAIL:
-        store.force_pair_owner("gmail", OWNER_EMAIL, user_handle="owner")
+        store._force_pair_owner("gmail", OWNER_EMAIL, user_handle="owner")
         print(section("[+]", "Owner Paired"))
         print(field("email", OWNER_EMAIL, GREEN))
         print(field("trust", "owner_paired", GREEN))

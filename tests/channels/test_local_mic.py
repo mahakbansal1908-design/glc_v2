@@ -75,7 +75,7 @@ def _voice_providers():
 @pytest.fixture
 def pair_owner():
     store = get_pairing_store()
-    store.force_pair_owner("local_mic", OWNER_ID, user_handle="owner")
+    store._force_pair_owner("local_mic", OWNER_ID, user_handle="owner")
     yield
     store.revoke("local_mic", OWNER_ID)
 

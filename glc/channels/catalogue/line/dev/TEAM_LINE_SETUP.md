@@ -262,7 +262,7 @@ export GLC_PAIRING_DB="$HOME/.glc/line-pairings.sqlite"
 uv run python -c 'from glc.security.pairing import get_pairing_store
 import os
 user_id = os.environ["LINE_OWNER_USER_ID"]
-get_pairing_store().force_pair_owner("line", user_id, user_handle="owner")
+get_pairing_store()._force_pair_owner("line", user_id, user_handle="owner")
 print("paired line owner")'
 ```
 

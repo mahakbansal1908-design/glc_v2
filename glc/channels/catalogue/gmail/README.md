@@ -184,7 +184,7 @@ The Gmail `users.watch()` registration publishes `{emailAddress, historyId}` not
 
 Trust is resolved from `~/.glc/pairings.sqlite`. The owner is registered on server startup via:
 ```python
-store.force_pair_owner("gmail", "owner@gmail.com", user_handle="owner")
+store._force_pair_owner("gmail", "owner@gmail.com", user_handle="owner")
 ```
 
 Or configure via environment variable:

@@ -27,7 +27,7 @@ def mock():
 @pytest.fixture
 def pair_owner():
     store = get_pairing_store()
-    store.force_pair_owner("discord", OWNER_ID, user_handle="owner")
+    store._force_pair_owner("discord", OWNER_ID, user_handle="owner")
     yield
     store.revoke("discord", OWNER_ID)
 

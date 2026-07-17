@@ -60,7 +60,7 @@ def test_trust_level_unknown_is_untrusted():
 
 
 def test_trust_level_owner_paired():
-    get_pairing_store().force_pair_owner("matrix", "owner-1", "owner")
+    get_pairing_store()._force_pair_owner("matrix", "owner-1", "owner")
     assert classify("matrix", "owner-1") == "owner_paired"
 
 

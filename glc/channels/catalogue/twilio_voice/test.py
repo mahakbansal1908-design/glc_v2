@@ -66,7 +66,7 @@ def mock():
 
 @pytest.fixture
 def owner_paired():
-    get_pairing_store().force_pair_owner("twilio_voice", OWNER_ID, user_handle="owner")
+    get_pairing_store()._force_pair_owner("twilio_voice", OWNER_ID, user_handle="owner")
     return OWNER_ID
 
 

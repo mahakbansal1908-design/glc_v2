@@ -40,7 +40,7 @@ async def main() -> None:
     store = get_pairing_store()
 
     if owner_id:
-        store.force_pair_owner("telegram", owner_id, user_handle="owner")
+        store._force_pair_owner("telegram", owner_id, user_handle="owner")
         print(f"Paired owner Telegram ID (from env): {owner_id}")
     else:
         print("\n[live_poll] No TELEGRAM_OWNER_ID set. Will auto-pair the first user who messages the bot!")
@@ -87,7 +87,7 @@ async def main() -> None:
                                     # Auto-pair the first sender as owner
                                     if user_id and not owner_id:
                                         owner_id = str(user_id)
-                                        store.force_pair_owner("telegram", owner_id, user_handle="owner")
+                                        store._force_pair_owner("telegram", owner_id, user_handle="owner")
                                         print(f"\n*** Auto-paired user {owner_id} as the owner! ***\n")
 
                                     print(f"Received Telegram Update ID: {update['update_id']}")

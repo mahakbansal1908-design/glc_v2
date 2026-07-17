@@ -136,7 +136,7 @@ def main() -> None:
 
     # ── Pair the owner so inbound is classified owner_paired ──
     if cfg["owner_number"]:
-        get_pairing_store().force_pair_owner("twilio_sms", cfg["owner_number"], user_handle="owner")
+        get_pairing_store()._force_pair_owner("twilio_sms", cfg["owner_number"], user_handle="owner")
         _field("owner", cfg["owner_number"], GREEN)
         _field("trust", "owner_paired", GREEN)
     else:

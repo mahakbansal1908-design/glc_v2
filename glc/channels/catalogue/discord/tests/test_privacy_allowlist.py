@@ -128,7 +128,7 @@ async def test_dm_owner_passes_when_flag_on(monkeypatch):
         lambda: {"channels": {"discord": {"enabled": True, "allowed_senders": []}}},
     )
     store = get_pairing_store()
-    store.force_pair_owner("discord", OWNER_ID, user_handle="owner")
+    store._force_pair_owner("discord", OWNER_ID, user_handle="owner")
     try:
         mock = DiscordMock()
         adapter = Adapter(config={"mock": mock, "enforce_allowlist_in_dm": True})
@@ -150,7 +150,7 @@ async def test_dm_enforcement_drops_everyone_when_channel_disabled(monkeypatch):
         lambda: {"channels": {"discord": {"enabled": False}}},
     )
     store = get_pairing_store()
-    store.force_pair_owner("discord", OWNER_ID, user_handle="owner")
+    store._force_pair_owner("discord", OWNER_ID, user_handle="owner")
     try:
         mock = DiscordMock()
         adapter = Adapter(config={"mock": mock, "enforce_allowlist_in_dm": True})
