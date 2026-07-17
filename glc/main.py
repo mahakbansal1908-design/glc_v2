@@ -73,7 +73,19 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="GLC v1 — Gateway for LLMs and Channels", lifespan=lifespan)
+from fastapi import Depends
+from glc.routes.control import _require_token
+
+is_prod = os.getenv("MODAL_IMAGE_ID") is not None
+
+app = FastAPI(
+    title="GLC v1 — Gateway for LLMs and Channels",
+    lifespan=lifespan,
+    docs_url=None if is_prod else "/docs",
+    redoc_url=None if is_prod else "/redoc",
+    openapi_url=None if is_prod else "/openapi.json",
+    dependencies=[Depends(_require_token)],
+)
 
 app.include_router(chat_route.router)
 app.include_router(transcribe_route.router)
