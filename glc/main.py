@@ -70,8 +70,21 @@ async def lifespan(app: FastAPI):
     app.state.embedders, app.state.embed_order = E.build_embedders()
     app.state.started_at = time.time()
     app.state.registered_channels = []
-    yield
 
+    # FIX for Leak 1 (Dump every provider key): Scrub provider API keys from the
+    # environment so that adapters running in the same process cannot read them.
+    for k in [
+        "GEMINI_API_KEY",
+        "NVIDIA_API_KEY",
+        "GROQ_API_KEY",
+        "CEREBRAS_API_KEY",
+        "OPEN_ROUTER_API_KEY",
+        "GITHUB_ACCESS_TOKEN",
+    ]:
+        if k in os.environ:
+            del os.environ[k]
+
+    yield
 
 from fastapi import Depends
 from glc.routes.control import _require_token
