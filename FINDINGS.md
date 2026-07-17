@@ -281,3 +281,22 @@ The gateway relies on a single Modal Secret (`glc-llm-keys`) that contains all m
 **How to Test the Vulnerability:**
 1. **Root Cause Analysis:** Inspect the `modal_app.py` deployment configuration: `@app.function(secrets=[modal.Secret.from_name("glc-llm-keys")])`.
 2. **Result:** The deployment explicitly injects the master keys into the shared execution environment, proving the architectural vulnerability.
+
+## 16. Non-reproducible image (A5)
+
+**Description:**
+The original `modal_app.py` built its image dynamically by using `modal.Image.debian_slim()` and chaining `.pip_install("fastapi>=0.110", ...)` with floating versions and loose dependency ranges. This completely bypassed the project's `uv.lock` file. Without a strictly pinned base image or locked dependencies, the gateway's build was non-reproducible. A shifted upstream package, a typosquatted dependency, or a compromised `debian_slim` base tag could silently introduce malicious code into the gateway directly at deployment time.
+
+**Audit Documentation (The Three Questions):**
+1. **Broken Invariant:** Supply Chain Integrity (Production builds must be 100% reproducible and immune to silent upstream drift).
+2. **Attacker Role:** Supply Chain Attacker (An attacker compromising a PyPI dependency or a Docker base image tag).
+3. **Migration Status:** Inherited structural flaw. The deployment script was written for developer convenience rather than production reproducibility.
+
+**The Fix:**
+We hardened `modal_app.py` to enforce a strictly reproducible build:
+1. **Pinned Base Image**: We replaced the floating `debian_slim()` tag with a hardened, cryptographically pinned registry image (`modal.Image.from_registry("python:3.11-slim-bookworm@sha256:...")`). Even if the upstream `latest` tag is compromised, our gateway will only ever boot from this exact, verified SHA-256 digest.
+2. **Locked Dependencies**: We replaced the loose `.pip_install(...)` array with `.uv_sync()`. This instructs Modal to build the Python environment strictly from the deterministic `uv.lock` file, mathematically guaranteeing that every single sub-dependency resolves to the exact same version on every deploy.
+
+**How to Test the Fix:**
+1. **Build Validation:** Run `uv run modal deploy modal_app.py`.
+2. **Result:** Modal will successfully construct the image using the pinned digest and the frozen `uv.lock` dependencies.

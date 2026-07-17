@@ -27,18 +27,12 @@ LOCAL_GLC = Path(__file__).parent / "glc"
 # Volume mount so all databases land on persistent storage instead of the
 # throwaway container filesystem.
 image = (
-    modal.Image.debian_slim(python_version="3.11")
-    .pip_install(
-        "fastapi>=0.110",
-        "uvicorn[standard]>=0.27",
-        "httpx>=0.27",
-        "python-dotenv>=1.0",
-        "pydantic>=2.6",
-        "jsonschema>=4.21",
-        "pyyaml>=6.0",
-        "websockets>=12.0",
-        "twilio>=9.0",
+    # FIX for A5: Pin base image by SHA256 digest to prevent supply-chain drift
+    modal.Image.from_registry(
+        "python:3.11-slim-bookworm@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba"
     )
+    # FIX for A5: Build strictly from uv.lock to guarantee reproducible builds
+    .uv_sync()
     .env({"GLC_CONFIG_DIR": "/data/glc"})
     .add_local_dir(str(LOCAL_GLC), remote_path="/root/glc")
 )
