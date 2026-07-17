@@ -51,6 +51,7 @@ llm_secret = modal.Secret.from_name("glc-llm-keys")
     volumes={"/data": data_volume},
     secrets=[llm_secret],
     min_containers=0,  # scale to zero when idle -> protects the free tier
+    concurrency_limit=1,  # FIX for A6: Pin to a single container to prevent SQLite volume corruption
 )
 @modal.asgi_app()
 def fastapi_app():

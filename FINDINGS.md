@@ -300,3 +300,20 @@ We hardened `modal_app.py` to enforce a strictly reproducible build:
 **How to Test the Fix:**
 1. **Build Validation:** Run `uv run modal deploy modal_app.py`.
 2. **Result:** Modal will successfully construct the image using the pinned digest and the frozen `uv.lock` dependencies.
+
+## 17. Audit volume assumes one writer (A6)
+
+**Description:**
+The gateway relies on standard SQLite databases (`audit.sqlite` and the ledger) stored on a Modal `Volume`. However, because the app is deployed as a serverless Modal Function, it could automatically scale out to multiple concurrent containers under high load. A Modal `Volume` fundamentally does not support concurrent distributed writes, nor does it support live-reloading of data between multiple uncoordinated instances. If two containers attempt to write to the SQLite database simultaneously, the database file will silently corrupt, and the audit trail will mathematically splinter across independent container memory states.
+
+**Audit Documentation (The Three Questions):**
+1. **Broken Invariant:** Audit logs must be tamper-proof / Data Integrity (The ledger and audit trail must never corrupt or lose history under concurrent load).
+2. **Attacker Role:** Denial of Service / Structural Failure (Not necessarily a targeted attack, but a critical failure when multiple requests hit simultaneously).
+3. **Migration Status:** Inherited structural flaw. Moving from local development (where only one process runs) to a serverless platform introduces horizontal scaling that breaks local filesystem assumptions.
+
+**The Fix:**
+While the "Move 3/4" capstone solution would involve migrating to a true distributed database (e.g., PostgreSQL or a specialized Event Store), we patched this structural flaw for Part 1 directly in `modal_app.py`. We added `concurrency_limit=1` to the `@app.function` decorator. This formally pins the gateway to a maximum of one single container instance at any given time. By deliberately trading off horizontal scalability for data integrity, we mathematically guarantee there will only ever be a single writer manipulating the SQLite file on the Modal Volume, completely eliminating the risk of concurrent write corruption.
+
+**How to Test the Fix:**
+1. **Load Test:** Send 50 simultaneous concurrent HTTP requests to the gateway.
+2. **Result:** Modal will queue the requests and process them sequentially through the single container instance, rather than spinning up multiple corrupted writers.
