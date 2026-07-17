@@ -292,19 +292,63 @@ async def _resolve_image_urls(messages):
     import httpx as _httpx
 
     async def _fetch_to_data_url(url: str) -> str:
+        import socket
+        import ipaddress
+        from urllib.parse import urlparse
+
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; GLCv1/0.1; +image-resolver)",
             "Accept": "image/*,*/*;q=0.8",
         }
-        async with _httpx.AsyncClient(timeout=30, follow_redirects=True, headers=headers) as c:
+        
+        async def _check_url(u: str):
+            parsed = urlparse(u)
+            if not parsed.hostname:
+                raise HTTPException(400, "invalid url")
             try:
-                r = await c.get(url)
-                r.raise_for_status()
-            except _httpx.HTTPError as e:
-                raise HTTPException(400, f"failed to fetch image url {url!r}: {e}")
-            mt = (r.headers.get("content-type") or "image/png").split(";")[0].strip()
-            b64 = base64.b64encode(r.content).decode()
-            return f"data:{mt};base64,{b64}"
+                loop = _asyncio.get_running_loop()
+                addrs = await loop.getaddrinfo(
+                    parsed.hostname, 
+                    parsed.port or (443 if parsed.scheme == 'https' else 80), 
+                    type=socket.SOCK_STREAM
+                )
+            except Exception as e:
+                raise HTTPException(400, f"DNS resolution failed for {parsed.hostname}")
+            
+            for family, type_, proto, canonname, sockaddr in addrs:
+                ip = sockaddr[0]
+                try:
+                    ip_obj = ipaddress.ip_address(ip)
+                    if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+                        raise HTTPException(400, f"SSRF blocked: IP {ip} is internal/private")
+                except ValueError:
+                    pass
+
+        current_url = url
+        redirects = 0
+        async with _httpx.AsyncClient(timeout=30, follow_redirects=False, headers=headers) as c:
+            while redirects < 5:
+                await _check_url(current_url)
+                try:
+                    r = await c.get(current_url)
+                except _httpx.HTTPError as e:
+                    raise HTTPException(400, f"failed to fetch image url {current_url!r}: {e}")
+                
+                if 300 <= r.status_code < 400:
+                    current_url = r.headers.get("location")
+                    if not current_url:
+                        raise HTTPException(400, "redirect missing location")
+                    redirects += 1
+                    continue
+                
+                if r.status_code != 200:
+                    raise HTTPException(400, f"failed to fetch image url {current_url!r}: status {r.status_code}")
+                
+                mt = (r.headers.get("content-type") or "image/png").split(";")[0].strip()
+                b64 = base64.b64encode(r.content).decode()
+                return f"data:{mt};base64,{b64}"
+            
+            raise HTTPException(400, "too many redirects")
 
     out = []
     for m in messages:
